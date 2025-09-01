@@ -1,7 +1,25 @@
-# llm-optimizer-experiments
-Experimenting with LLM Optimizers with replicable experiments
+Here is the updated tutorial tailored to your specific hardware, software, and safety requirements.
 
-Here is the updated tutorial tailored to your specific hardware, software, and safety requirements.This guide provides the scripts to create a self-terminating Google Cloud instance with an a2-highgpu-8g machine type, ensuring your experiment automatically shuts down after a maximum of two hours to protect your budget.Important Note on Data PersistenceYou have requested Local SSDs for maximum performance. It is critical to understand that Local SSDs are ephemeral. All data stored on them will be permanently lost when the instance is stopped or deleted. Your startup script is designed to delete the instance after two hours. You must ensure your PyTorch script saves its final model checkpoints, logs, and any other results to a persistent location (like a Google Cloud Storage bucket or by transferring it off the machine) before the two-hour limit is reached.Protocol 1: Starting Your Self-Terminating Compute NodeThis process involves two parts: first, creating a small shutdown script, and second, launching the VM instance with instructions to run that script on startup.Step 1: Create the Auto-Shutdown ScriptThis script will run in the background on your new VM. It waits for two hours and then calls the command to delete the instance it is running on.Create a file on your local machine named shutdown_script.sh and paste the following content into it: code Bashdownloadcontent_copyexpand_less    #!/bin/bash
+This guide provides the scripts to create a self-terminating Google Cloud instance with an `a2-highgpu-8g` machine type, ensuring your experiment automatically shuts down after a maximum of two hours to protect your budget.
+
+### **Important Note on Data Persistence**
+
+You have requested Local SSDs for maximum performance. It is critical to understand that **Local SSDs are ephemeral**. All data stored on them will be **permanently lost** when the instance is stopped or deleted. Your startup script is designed to delete the instance after two hours. You must ensure your PyTorch script saves its final model checkpoints, logs, and any other results to a persistent location (like a Google Cloud Storage bucket or by transferring it off the machine) *before* the two-hour limit is reached.
+
+---
+
+### Protocol 1: Starting Your Self-Terminating Compute Node
+
+This process involves two parts: first, creating a small shutdown script, and second, launching the VM instance with instructions to run that script on startup.
+
+**Step 1: Create the Auto-Shutdown Script**
+
+This script will run in the background on your new VM. It waits for two hours and then calls the command to delete the instance it is running on.
+
+Create a file on your local machine named `shutdown_script.sh` and paste the following content into it:
+
+```bash
+#!/bin/bash
 
 # This script is executed by the VM on startup.
 # It launches a background process that will forcefully delete the VM after 2 hours.
@@ -20,7 +38,16 @@ Here is the updated tutorial tailored to your specific hardware, software, and s
   gcloud compute instances delete "$INSTANCE_NAME" --zone="$INSTANCE_ZONE" --quiet
 
 ) & # The '&' runs this whole block in the background, allowing your main work to proceed.
-  Step 2: Create the VM InstanceNow, run the following command from your terminal. It will create the powerful A2 instance, attach the Local SSDs, and pass the shutdown_script.sh to be executed upon boot.Make sure the shutdown_script.sh file is in the same directory where you run this command. code Bashdownloadcontent_copyexpand_lessIGNORE_WHEN_COPYING_STARTIGNORE_WHEN_COPYING_END    #!/bin/bash
+```
+
+**Step 2: Create the VM Instance**
+
+Now, run the following command from your terminal. It will create the powerful A2 instance, attach the Local SSDs, and pass the `shutdown_script.sh` to be executed upon boot.
+
+Make sure the `shutdown_script.sh` file is in the same directory where you run this command.
+
+```bash
+#!/bin/bash
 
 # --- Configuration ---
 export INSTANCE_NAME="nanogpt-a2-autoterm"
@@ -51,7 +78,26 @@ gcloud compute instances create $INSTANCE_NAME \
 echo "Instance $INSTANCE_NAME created."
 echo "IMPORTANT: This instance will be automatically deleted in 2 hours."
 echo "To connect, run: gcloud compute ssh --zone $ZONE $INSTANCE_NAME"
-  Explanation of Key Changes:--machine-type="a2-highgpu-8g": Selects the instance with 8 NVIDIA A100 GPUs.--zone="us-central1-a": Places the machine in the Iowa region.--local-ssd=interface=NVME: Attaches the high-performance Local SSDs. The a2-highgpu-8g type automatically includes 8x375 GB disks with this single flag.--boot-disk-type="pd-standard": Ensures the operating system resides on a lower-cost standard hard drive.--metadata-from-file=startup-script=shutdown_script.sh: This is the built-in safety mechanism. It tells Google Cloud to take your shutdown_script.sh file and execute it the first time the VM boots up.Protocol 2: Shutting Down Manually (Early Completion Override)If your job finishes in less than two hours, you don't need to wait for the automatic shutdown. Running this script will immediately delete the instance and stop the billing.The Manual Deletion Script: code Bashdownloadcontent_copyexpand_lessIGNORE_WHEN_COPYING_STARTIGNORE_WHEN_COPYING_END    #!/bin/bash
+```
+
+**Explanation of Key Changes:**
+
+*   **`--machine-type="a2-highgpu-8g"`**: Selects the instance with 8 NVIDIA A100 GPUs.
+*   **`--zone="us-central1-a"`**: Places the machine in the Iowa region.
+*   **`--local-ssd=interface=NVME`**: Attaches the high-performance Local SSDs. The `a2-highgpu-8g` type automatically includes 8x375 GB disks with this single flag.
+*   **`--boot-disk-type="pd-standard"`**: Ensures the operating system resides on a lower-cost standard hard drive.
+*   **`--metadata-from-file=startup-script=shutdown_script.sh`**: This is the built-in safety mechanism. It tells Google Cloud to take your `shutdown_script.sh` file and execute it the first time the VM boots up.
+
+---
+
+### Protocol 2: Shutting Down Manually (Early Completion Override)
+
+If your job finishes in less than two hours, you don't need to wait for the automatic shutdown. Running this script will immediately delete the instance and stop the billing.
+
+**The Manual Deletion Script:**
+
+```bash
+#!/bin/bash
 
 # --- Configuration ---
 # Ensure this matches the instance you created
@@ -65,16 +111,7 @@ gcloud compute instances delete $INSTANCE_NAME \
     --quiet
 
 echo "Instance $INSTANCE_NAME and all its resources have been successfully deleted."
-
-
-Here is the complete Standard Operating Procedure (SOP) to get this working. This process involves a **one-time setup** on your local machine to get your credentials, followed by a repeatable workflow on the cloud VM.
-
-### Overview of the Method
-
-We will use `rclone` to securely connect to your Google Drive account. The process looks like this:
-
-1.  **On your Local Computer (One-Time Only):** You will install `rclone` and authorize it to access your Google Drive. This will generate a secret configuration file.
-2.  **On the Cloud VM (For Each Experiment):** You will copy this secret configuration file to the VM, install `rclone`, and then run a simple command to copy your output folder to the precise Google Drive folder you want.
+```
 
 ---
 
